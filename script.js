@@ -1,7 +1,102 @@
-const section=document.querySelector('.cinema-scroll');const root=document.documentElement;const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');const track=document.querySelector('.sights-track');const controls=document.querySelector('.sights-controls');const prev=document.querySelector('.sight-prev');const next=document.querySelector('.sight-next');const originals=[...document.querySelectorAll('.sight-card')];let targetMouseX=0,targetMouseY=0,mouseX=0,mouseY=0,targetScroll=0,smoothScroll=0,initialized=false,rafPending=false,sightCards=[],originalSightCount=originals.length,activeSight=originalSightCount;
-const clamp=(v,min=0,max=1)=>Math.min(max,Math.max(min,v));const smoothstep=(a,b,v)=>{const x=clamp((v-a)/(b-a));return x*x*(3-2*x)};const lerp=(a,b,t)=>a+(b-a)*t;const segmentInOut=(s,a,b,c,d)=>{const enter=smoothstep(a,b,s),exit=smoothstep(c,d,s);return{enter,exit,active:enter*(1-exit)}};const getScrollDistance=()=>clamp(-section.getBoundingClientRect().top,0,section.offsetHeight-innerHeight);
-function setupSightSlider(){track.replaceChildren();for(let set=0;set<3;set++)originals.forEach((card,i)=>{const clone=card.cloneNode(true);clone.dataset.sightIndex=set*originalSightCount+i;track.append(clone)});sightCards=[...track.querySelectorAll('.sight-card')];activeSight=originalSightCount;sightCards.forEach(card=>{card.addEventListener('click',()=>selectSightCard(card));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectSightCard(card)}})});track.addEventListener('transitionend',normalizeSightSlider);updateSightSlider()}
-function updateSightSlider(){if(!sightCards.length)return;const width=sightCards[0].offsetWidth;const gap=parseFloat(getComputedStyle(track).columnGap||'0');root.style.setProperty('--sights-shift',`${-(width+gap)*activeSight}px`);sightCards.forEach((c,i)=>c.classList.toggle('is-active',i===activeSight))}function moveSightSlider(dir){activeSight+=dir;updateSightSlider()}function selectSightCard(card){const i=Number(card.dataset.sightIndex);if(Number.isFinite(i)){activeSight=i;updateSightSlider()}}function jumpSightSlider(i){track.classList.add('is-jumping');activeSight=i;updateSightSlider();requestAnimationFrame(()=>requestAnimationFrame(()=>track.classList.remove('is-jumping')))}function normalizeSightSlider(){if(activeSight>=originalSightCount*2)jumpSightSlider(activeSight-originalSightCount);else if(activeSight<originalSightCount)jumpSightSlider(activeSight+originalSightCount)}
-function update(){rafPending=false;targetScroll=getScrollDistance();if(!initialized||reduceMotion.matches){smoothScroll=targetScroll;initialized=true}else smoothScroll=lerp(smoothScroll,targetScroll,.14);if(Math.abs(smoothScroll-targetScroll)<.08)smoothScroll=targetScroll;mouseX=lerp(mouseX,targetMouseX,.12);mouseY=lerp(mouseY,targetMouseY,.12);const frame1=segmentInOut(smoothScroll,520,900,1320,1620);const frame2=segmentInOut(smoothScroll,1760,2140,2540,2760);const introExit=smoothstep(90,650,smoothScroll);const cardsRaw=smoothstep(2760,3560,smoothScroll);const cardsEnter=Math.pow(cardsRaw,1.55);const controlsEnter=smoothstep(3360,3660,smoothScroll);const progress=clamp(smoothScroll/3700);const parallaxX=reduceMotion.matches?0:mouseX;const parallaxY=reduceMotion.matches?0:mouseY;
-root.style.setProperty('--mx',parallaxX.toFixed(4));root.style.setProperty('--my',parallaxY.toFixed(4));root.style.setProperty('--back-x',`${parallaxX*-14}px`);root.style.setProperty('--back-y',`${parallaxY*-5}px`);root.style.setProperty('--back-scale',(.76+progress*.2+frame1.enter*.16+frame2.enter*.12).toFixed(4));root.style.setProperty('--back-opacity',(1-frame1.active*.05).toFixed(4));root.style.setProperty('--title-y',`${introExit*-210}px`);root.style.setProperty('--title-scale',(1-introExit*.08).toFixed(4));root.style.setProperty('--title-opacity',(1-introExit).toFixed(4));root.style.setProperty('--intro-copy-y',`${introExit*90}px`);root.style.setProperty('--intro-copy-opacity',(1-introExit).toFixed(4));root.style.setProperty('--panel1-opacity',frame1.active.toFixed(4));root.style.setProperty('--panel1-y',`${-frame1.exit*86+(1-frame1.enter)*58}px`);root.style.setProperty('--panel2-opacity',frame2.active.toFixed(4));root.style.setProperty('--panel2-y',`${-frame2.exit*86+(1-frame2.enter)*58}px`);root.style.setProperty('--split',Math.pow(frame1.enter,1.5).toFixed(4));root.style.setProperty('--frame2-opacity',(frame1.active*(1-frame2.enter*.35)).toFixed(4));root.style.setProperty('--sights-enter-x',`${(1-cardsEnter)*420}vw`);root.style.setProperty('--sights-visibility',cardsEnter>.01?'visible':'hidden');root.style.setProperty('--sights-controls-opacity',controlsEnter.toFixed(4));root.style.setProperty('--sights-scale',(1/(.76+progress*.2+frame1.enter*.16+frame2.enter*.12)).toFixed(4));controls.classList.toggle('is-ready',controlsEnter>.98);if(Math.abs(smoothScroll-targetScroll)>.08||Math.abs(mouseX-targetMouseX)>.001||Math.abs(mouseY-targetMouseY)>.001)requestTick()}
-function requestTick(){if(!rafPending){rafPending=true;requestAnimationFrame(update)}}window.addEventListener('scroll',requestTick,{passive:true});window.addEventListener('resize',()=>{updateSightSlider();requestTick()});window.addEventListener('pointermove',e=>{targetMouseX=e.clientX/innerWidth-.5;targetMouseY=e.clientY/innerHeight-.5;requestTick()},{passive:true});prev?.addEventListener('click',()=>moveSightSlider(-1));next?.addEventListener('click',()=>moveSightSlider(1));setupSightSlider();requestTick();
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12, rootMargin: '0px 0px -40px' });
+
+document.querySelectorAll('.reveal').forEach((el, index) => {
+  el.style.transitionDelay = `${Math.min(index * 0.04, 0.35)}s`;
+  if (reduceMotion) el.classList.add('visible');
+  else revealObserver.observe(el);
+});
+
+const animatedCopy = document.querySelector('[data-animate-text]');
+if (animatedCopy) {
+  const text = animatedCopy.textContent;
+  animatedCopy.textContent = '';
+  [...text].forEach((char) => {
+    const span = document.createElement('span');
+    span.className = 'char';
+    span.textContent = char;
+    animatedCopy.appendChild(span);
+  });
+}
+
+const updateAnimatedText = () => {
+  if (!animatedCopy) return;
+  const rect = animatedCopy.getBoundingClientRect();
+  const start = window.innerHeight * 0.82;
+  const end = window.innerHeight * 0.22;
+  const progress = Math.max(0, Math.min(1, (start - rect.top) / (start - end)));
+  const chars = animatedCopy.querySelectorAll('.char');
+  chars.forEach((char, i) => {
+    const local = Math.max(0, Math.min(1, progress * 1.25 - i / Math.max(chars.length, 1) * 0.72));
+    char.style.opacity = String(0.2 + local * 0.8);
+  });
+};
+
+const marquee = document.querySelector('.marquee-section');
+const rowOne = document.querySelector('.row-one .marquee-track');
+const rowTwo = document.querySelector('.row-two .marquee-track');
+const projectCards = [...document.querySelectorAll('.project-card')];
+
+const updateScrollEffects = () => {
+  if (marquee && rowOne && rowTwo) {
+    const sectionTop = marquee.getBoundingClientRect().top + window.scrollY;
+    const offset = (window.scrollY - sectionTop + window.innerHeight) * 0.3;
+    rowOne.style.transform = `translate3d(${offset - 200}px,0,0)`;
+    rowTwo.style.transform = `translate3d(${-offset + 200}px,0,0)`;
+  }
+
+  projectCards.forEach((card, index) => {
+    const rect = card.getBoundingClientRect();
+    const total = projectCards.length;
+    const targetScale = 1 - (total - 1 - index) * 0.03;
+    const progress = Math.max(0, Math.min(1, (96 - rect.top) / Math.max(rect.height, 1)));
+    const scale = 1 - progress * (1 - targetScale);
+    card.style.transform = `scale(${scale})`;
+  });
+
+  updateAnimatedText();
+};
+
+let ticking = false;
+const requestScrollUpdate = () => {
+  if (!ticking) {
+    ticking = true;
+    requestAnimationFrame(() => {
+      updateScrollEffects();
+      ticking = false;
+    });
+  }
+};
+
+window.addEventListener('scroll', requestScrollUpdate, { passive: true });
+window.addEventListener('resize', requestScrollUpdate);
+
+const magnet = document.querySelector('.magnet');
+if (magnet && !reduceMotion) {
+  const strength = Number(magnet.dataset.strength || 3);
+  const padding = 150;
+  window.addEventListener('pointermove', (event) => {
+    const rect = magnet.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const withinX = event.clientX > rect.left - padding && event.clientX < rect.right + padding;
+    const withinY = event.clientY > rect.top - padding && event.clientY < rect.bottom + padding;
+    if (withinX && withinY) {
+      magnet.style.transition = 'transform 0.3s ease-out';
+      magnet.style.transform = `translateX(-50%) translate3d(${(event.clientX - centerX) / strength}px, ${(event.clientY - centerY) / strength}px, 0)`;
+    } else {
+      magnet.style.transition = 'transform 0.6s ease-in-out';
+      magnet.style.transform = 'translateX(-50%) translate3d(0,0,0)';
+    }
+  }, { passive: true });
+}
+
+updateScrollEffects();
